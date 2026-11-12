@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DHT11 · Telemetrie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #14171a;
+    --bg-grid: #1a1e22;
+    --panel: #1c2126;
+    --panel-border: #2a3038;
+    --text: #e8eaed;
+    --muted: #7d8794;
+    --safe: #4ade80;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --temp: #f97316;
+    --hum: #38bdf8;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0 / 100% 28px,
+      linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px) 0 0 / 28px 100%,
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1120px;
+    margin: 0 auto 24px auto;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+
+  .topbar-title {
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .topbar-title b { color: var(--text); }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: 0 0 0 3px transparent;
+    transition: all 0.3s ease;
+  }
+
+  .dot.ok { background: var(--safe); box-shadow: 0 0 0 3px rgba(74,222,128,0.15); }
+  .dot.alert { background: var(--danger); box-shadow: 0 0 0 3px rgba(248,113,113,0.18); animation: pulse 1.4s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .container { max-width: 1120px; margin: 0 auto; }
+
+  .alert-banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: rgba(248,113,113,0.08);
+    border: 1px solid rgba(248,113,113,0.35);
+    color: var(--danger);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  .alert-banner.show { display: flex; }
+
+  .gauges {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 640px) {
+    .gauges { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 22px 24px;
+  }
+
+  .card-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .card-value {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 52px;
+    line-height: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .card-value .unit {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  .card-value.temp { color: var(--temp); }
+  .card-value.hum { color: var(--hum); }
+
+  .gauge-track {
+    position: relative;
+    height: 6px;
+    border-radius: 3px;
+    background: #2a3038;
+    margin-top: 18px;
+  }
+
+  .gauge-safe-zone {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: rgba(74,222,128,0.18);
+    border-radius: 3px;
+  }
+
+  .gauge-marker {
+    position: absolute;
+    top: -4px;
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--text);
+    transition: left 0.4s ease, background 0.3s ease;
+  }
+
+  .gauge-marker.alert { background: var(--danger); }
+
+  .gauge-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+
+  .chart-card { margin-bottom: 20px; }
+  .chart-wrap { height: 280px; margin-top: 12px; }
+
+  .config-card summary {
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    outline: none;
+  }
+
+  .config-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 18px;
+  }
+
+  @media (max-width: 640px) {
+    .config-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  .field label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .field input {
+    width: 100%;
+    background: #14171a;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 8px 10px;
+  }
+
+  .field input:focus {
+    outline: 2px solid var(--hum);
+    outline-offset: 1px;
+  }
+
+  .save-btn {
+    margin-top: 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: var(--hum);
+    color: #0a1620;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .save-btn:active { transform: translateY(1px); }
+
+  .save-confirm {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--safe);
+    margin-left: 12px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .save-confirm.show { opacity: 1; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title"> <b></b> · DHT11 TELEMETRY</div>
+  <div class="status-pill">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">CONNEXION...</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="alert-banner" id="alertBanner">
+    ⚠ <span id="alertText">Depassement de seuil detecte</span>
+  </div>
+
+  <div id="mainContent" style="display:none;">
+
+    <div class="gauges">
+      <div class="card">
+        <div class="card-label">Temperature</div>
+        <div class="card-value temp"><span id="tempValue">--</span><span class="unit">°C</span></div>
+        <div class="gauge-track">
+          <div class="gauge-safe-zone" id="tempSafeZone"></div>
+          <div class="gauge-marker" id="tempMarker"></div>
+        </div>
+        <div class="gauge-labels">
+          <span>-10°C</span>
+          <span id="tempRangeLabel">15 – 30°C</span>
+          <span>50°C</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Humidite</div>
+        <div class="card-value hum"><span id="humValue">--</span><span class="unit">%HR</span></div>
+        <div class="gauge-track">
+          <div class="gauge-safe-zone" id="humSafeZone"></div>
+          <div class="gauge-marker" id="humMarker"></div>
+        </div>
+        <div class="gauge-labels">
+          <span>0%</span>
+          <span id="humRangeLabel">30 – 70%</span>
+          <span>100%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card chart-card">
+      <div class="card-label">Historique (<span id="pointCount">0</span> points)</div>
+      <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
+    </div>
+
+    <details class="card config-card">
+      <summary>Configurer les seuils d'alerte</summary>
+      <div class="config-grid">
+        <div class="field">
+          <label>Temp. min (°C)</label>
+          <input type="number" step="0.5" id="cfgTempMin">
+        </div>
+        <div class="field">
+          <label>Temp. max (°C)</label>
+          <input type="number" step="0.5" id="cfgTempMax">
+        </div>
+        <div class="field">
+          <label>Humidite min (%)</label>
+          <input type="number" step="1" id="cfgHumMin">
+        </div>
+        <div class="field">
+          <label>Humidite max (%)</label>
+          <input type="number" step="1" id="cfgHumMax">
+        </div>
+      </div>
+      <button class="save-btn" id="saveBtn">Enregistrer</button>
+      <span class="save-confirm" id="saveConfirm">✓ Seuils mis a jour</span>
+    </details>
+
+  </div>
+
+  <div class="empty-state" id="emptyState">
+    En attente de donnees — verifiez que dht11_logger.py tourne bien<br>
+    et que le fichier dht11_log.csv se trouve a cote de ce script.
+  </div>
+
+</div>
+
+<script>
+const TEMP_RANGE = { min: -10, max: 50 };
+const HUM_RANGE  = { min: 0,   max: 100 };
+
+let chart = null;
+let currentConfig = null;
+
+function pct(value, range) {
+  const p = (value - range.min) / (range.max - range.min) * 100;
+  return Math.max(0, Math.min(100, p));
+}
+
+function initChart() {
+  const ctx = document.getElementById('historyChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Temperature (°C)',
+          data: [],
+          borderColor: '#f97316',
+          backgroundColor: 'rgba(249,115,22,0.08)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.25,
+          yAxisID: 'yTemp',
+        },
+        {
+          label: 'Humidite (%)',
+          data: [],
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56,189,248,0.08)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.25,
+          yAxisID: 'yHum',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: '#7d8794', font: { family: 'IBM Plex Mono', size: 11 } },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#7d8794', maxTicksLimit: 8, font: { family: 'IBM Plex Mono', size: 10 } },
+          grid: { color: '#2a3038' },
+        },
+        yTemp: {
+          position: 'left',
+          ticks: { color: '#f97316', font: { family: 'IBM Plex Mono', size: 10 } },
+          grid: { color: '#2a3038' },
+        },
+        yHum: {
+          position: 'right',
+          ticks: { color: '#38bdf8', font: { family: 'IBM Plex Mono', size: 10 } },
+          grid: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function updateConfigFields(cfg) {
+  document.getElementById('cfgTempMin').value = cfg.temp_min;
+  document.getElementById('cfgTempMax').value = cfg.temp_max;
+  document.getElementById('cfgHumMin').value = cfg.hum_min;
+  document.getElementById('cfgHumMax').value = cfg.hum_max;
+  document.getElementById('tempRangeLabel').textContent = `${cfg.temp_min} – ${cfg.temp_max}°C`;
+  document.getElementById('humRangeLabel').textContent = `${cfg.hum_min} – ${cfg.hum_max}%`;
+
+  document.getElementById('tempSafeZone').style.left = pct(cfg.temp_min, TEMP_RANGE) + '%';
+  document.getElementById('tempSafeZone').style.width = (pct(cfg.temp_max, TEMP_RANGE) - pct(cfg.temp_min, TEMP_RANGE)) + '%';
+
+  document.getElementById('humSafeZone').style.left = pct(cfg.hum_min, HUM_RANGE) + '%';
+  document.getElementById('humSafeZone').style.width = (pct(cfg.hum_max, HUM_RANGE) - pct(cfg.hum_min, HUM_RANGE)) + '%';
+}
+
+async function refresh() {
+  try {
+    const res = await fetch('/api/data');
+    const data = await res.json();
+
+    if (!currentConfig || JSON.stringify(currentConfig) !== JSON.stringify(data.config)) {
+      currentConfig = data.config;
+      updateConfigFields(currentConfig);
+    }
+
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const alertBanner = document.getElementById('alertBanner');
+
+    if (data.status === 'nodata') {
+      document.getElementById('mainContent').style.display = 'none';
+      document.getElementById('emptyState').style.display = 'block';
+      statusDot.className = 'dot';
+      statusText.textContent = 'AUCUNE DONNEE';
+      return;
+    }
+
+    document.getElementById('mainContent').style.display = 'block';
+    document.getElementById('emptyState').style.display = 'none';
+
+    const latest = data.latest;
+    document.getElementById('tempValue').textContent = latest.temperature.toFixed(1);
+    document.getElementById('humValue').textContent = latest.humidity.toFixed(1);
+
+    const tempMarker = document.getElementById('tempMarker');
+    const humMarker = document.getElementById('humMarker');
+    tempMarker.style.left = pct(latest.temperature, TEMP_RANGE) + '%';
+    humMarker.style.left = pct(latest.humidity, HUM_RANGE) + '%';
+
+    const tempAlert = latest.temperature < data.config.temp_min || latest.temperature > data.config.temp_max;
+    const humAlert = latest.humidity < data.config.hum_min || latest.humidity > data.config.hum_max;
+
+    tempMarker.classList.toggle('alert', tempAlert);
+    humMarker.classList.toggle('alert', humAlert);
+
+    if (data.status === 'alert') {
+      statusDot.className = 'dot alert';
+      statusText.textContent = 'SEUIL DEPASSE';
+      alertBanner.classList.add('show');
+      let msg = [];
+      if (tempAlert) msg.push(`temperature ${latest.temperature.toFixed(1)}°C hors plage`);
+      if (humAlert) msg.push(`humidite ${latest.humidity.toFixed(1)}% hors plage`);
+      document.getElementById('alertText').textContent = msg.join(' · ');
+    } else {
+      statusDot.className = 'dot ok';
+      statusText.textContent = 'NOMINAL';
+      alertBanner.classList.remove('show');
+    }
+
+    document.getElementById('pointCount').textContent = data.rows.length;
+
+    if (chart) {
+      chart.data.labels = data.rows.map(r => r.timestamp.split(' ')[1] || r.timestamp);
+      chart.data.datasets[0].data = data.rows.map(r => r.temperature);
+      chart.data.datasets[1].data = data.rows.map(r => r.humidity);
+      chart.update('none');
+    }
+
+  } catch (err) {
+    document.getElementById('statusText').textContent = 'ERREUR SERVEUR';
+    document.getElementById('statusDot').className = 'dot alert';
+  }
+}
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const payload = {
+    temp_min: document.getElementById('cfgTempMin').value,
+    temp_max: document.getElementById('cfgTempMax').value,
+    hum_min: document.getElementById('cfgHumMin').value,
+    hum_max: document.getElementById('cfgHumMax').value,
+  };
+  const res = await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  currentConfig = await res.json();
+  updateConfigFields(currentConfig);
+
+  const confirm = document.getElementById('saveConfirm');
+  confirm.classList.add('show');
+  setTimeout(() => confirm.classList.remove('show'), 2000);
+});
+
+initChart();
+refresh();
+setInterval(refresh, 2000);
+</script>
+
+</body>
+</html>

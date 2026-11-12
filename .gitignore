@@ -1,0 +1,15 @@
+**/node_modules/
+**/__pycache__/
+*.py[cod]
+
+**/.env
+**/.env.*
+!**/.env.example
+
+**/dht11_log.csv
+**/backend/data/users.json
+**/backend/data/loginHistory.json
+**/backend/data/actionLogs.json
+**/backend/data/sensor_readings.json
+
+/Asteel/

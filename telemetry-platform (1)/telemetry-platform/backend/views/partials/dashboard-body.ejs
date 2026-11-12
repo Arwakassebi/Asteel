@@ -1,0 +1,30 @@
+<section class="card card--temp">
+  <h2 class="card__title">Température</h2>
+  <div class="temp-display">
+    <span id="currentTemp" class="temp-display__value">--</span>
+    <span class="temp-display__unit">°C</span>
+  </div>
+  <div class="gauge" role="img" aria-label="Jauge de température">
+    <div id="tempGaugeFill" class="gauge__fill"></div>
+  </div>
+</section>
+
+<section class="card card--hum">
+  <h2 class="card__title">Humidité</h2>
+  <div class="temp-display">
+    <span id="currentHum" class="temp-display__value">--</span>
+    <span class="temp-display__unit">%</span>
+  </div>
+  <div class="gauge" role="img" aria-label="Jauge d'humidité">
+    <div id="humGaugeFill" class="gauge__fill gauge__fill--hum"></div>
+  </div>
+</section>
+
+<section class="card card--status">
+  <h2 class="card__title">État du système</h2>
+  <div id="statusBanner" class="status-banner status-banner--normal">
+    <span id="statusIcon" class="status-banner__icon">✅</span>
+    <span id="statusText" class="status-banner__text">En attente de données…</span>
+  </div>
+  <p id="lastUpdate" class="card__meta">Dernière mise à jour : —</p>
+</section>
